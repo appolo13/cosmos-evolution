@@ -98,6 +98,8 @@ class EvolutionEngine:
             
         elif accident["type"] == "resource_discovery":
             if accident["subtype"] == "special_material":
+                if "discovered_resources" not in entity:
+                    entity["discovered_resources"] = []
                 entity["discovered_resources"].append({
                     "type": random.choice(["time_crystal_fragment", "memory_stone_piece", "void_touched_metal"]),
                     "epoch": self.current_epoch
