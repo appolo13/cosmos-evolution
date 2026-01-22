@@ -14,12 +14,74 @@ from typing import Dict, List, Any
 EPOCHS_PER_RUN = 100  # 실행당 진화할 epoch 수
 ACCIDENT_CHANCE = 0.15  # 우연 발생 확률 (frequent 설정)
 
+
+def ensure_keys(d: Dict, keys: Dict[str, Any]):
+    """딕셔너리에 키가 없으면 기본값으로 생성"""
+    for key, default in keys.items():
+        if key not in d:
+            d[key] = default() if callable(default) else default
+
+
 class EvolutionEngine:
     def __init__(self, world_state: Dict):
         self.world = world_state
         self.current_epoch = world_state["universe"]["current_epoch"]
         self.new_events = []
         self.new_accidents = []
+        
+        # 필수 구조 보장
+        self._ensure_world_structure()
+        
+    def _ensure_world_structure(self):
+        """월드 구조 보장"""
+        ensure_keys(self.world, {
+            "history": dict,
+            "entities": dict,
+            "interplanetary": dict,
+            "wanderer": dict,
+            "meta": dict
+        })
+        
+        ensure_keys(self.world["history"], {
+            "major_events": list,
+            "accidents": list,
+            "discoveries": list,
+            "contacts": list,
+            "extinctions": list
+        })
+        
+        ensure_keys(self.world["wanderer"], {
+            "known_as": list,
+            "interventions": list,
+            "incarnations": list,
+            "resistance_level": 0,
+            "first_noticed": None
+        })
+        
+        ensure_keys(self.world["meta"], {
+            "total_epochs_evolved": 0,
+            "version": "1.0"
+        })
+        
+    def _ensure_entity_structure(self, entity: Dict):
+        """엔티티 구조 보장"""
+        ensure_keys(entity, {
+            "discovered_resources": list,
+            "technology": list,
+            "history": list,
+            "relations": dict,
+            "notable_individuals": list,
+            "culture": lambda: {"values": [], "taboos": [], "myths": [], "rituals": []},
+            "dna": lambda: {"innate": {}, "environmental": {}, "expressed": {}}
+        })
+        
+        if "culture" in entity:
+            ensure_keys(entity["culture"], {
+                "values": list,
+                "taboos": list,
+                "myths": list,
+                "rituals": list
+            })
         
     def evolve(self, epochs: int = EPOCHS_PER_RUN):
         """메인 진화 루프"""
@@ -77,9 +139,11 @@ class EvolutionEngine:
         entity = self._get_entity(accident["affected"])
         if not entity:
             return
+        
+        # 엔티티 구조 보장
+        self._ensure_entity_structure(entity)
             
         dna = entity.get("dna", {}).get("innate", {})
-        expressed = entity.get("dna", {}).get("expressed", {})
         
         # DNA에 따른 반응 계산
         response = self._calculate_response(entity, accident)
@@ -98,8 +162,6 @@ class EvolutionEngine:
             
         elif accident["type"] == "resource_discovery":
             if accident["subtype"] == "special_material":
-                if "discovered_resources" not in entity:
-                    entity["discovered_resources"] = []
                 entity["discovered_resources"].append({
                     "type": random.choice(["time_crystal_fragment", "memory_stone_piece", "void_touched_metal"]),
                     "epoch": self.current_epoch
@@ -117,8 +179,6 @@ class EvolutionEngine:
                 "born": self.current_epoch,
                 "influence": accident["severity"]
             }
-            if "notable_individuals" not in entity:
-                entity["notable_individuals"] = []
             entity["notable_individuals"].append(individual)
             
         elif accident["type"] == "celestial":
@@ -147,23 +207,14 @@ class EvolutionEngine:
         
         responses = []
         
-        # 공격성 체크
         if dna.get("aggression", 5) > 7:
             responses.append("공격적 대응")
-        
-        # 사회성 체크
         if dna.get("sociality", 5) > 7:
             responses.append("집단 협력")
-        
-        # 적응력 체크
         if dna.get("adaptability", 5) > 7:
             responses.append("빠른 적응")
-        
-        # 영성 체크
         if dna.get("spirituality", 5) > 7:
             responses.append("종교적 해석")
-            
-        # 호기심 체크
         if dna.get("curiosity", 5) > 7:
             responses.append("탐구적 접근")
         
@@ -173,6 +224,7 @@ class EvolutionEngine:
         """각 엔티티 처리"""
         for planet_id, entities in self.world.get("entities", {}).items():
             for entity in entities:
+                self._ensure_entity_structure(entity)
                 self._grow_population(entity)
                 self._evolve_culture(entity)
                 self._check_stage_advancement(entity)
@@ -180,26 +232,22 @@ class EvolutionEngine:
     
     def _grow_population(self, entity: Dict):
         """인구 성장"""
-        base_growth = 0.001  # 0.1% 기본 성장
+        base_growth = 0.001
         dna = entity.get("dna", {}).get("innate", {})
         
-        # 사회성이 높으면 성장률 증가
         sociality_bonus = (dna.get("sociality", 5) - 5) * 0.0002
-        
-        # 공격성이 높으면 내부 갈등으로 성장률 감소
         aggression_penalty = (dna.get("aggression", 5) - 5) * 0.0001
         
         growth_rate = base_growth + sociality_bonus - aggression_penalty
         growth = int(entity["population"] * growth_rate)
         
-        entity["population"] = min(entity["population"] + max(0, growth), 10000000)  # 최대 인구 제한
+        entity["population"] = min(entity["population"] + max(0, growth), 10000000)
     
     def _evolve_culture(self, entity: Dict):
         """문화 진화"""
         dna = entity.get("dna", {}).get("innate", {})
         
-        # 가끔 새로운 문화 요소 발생
-        if random.random() < 0.001:  # 0.1% 확률
+        if random.random() < 0.001:
             if dna.get("spirituality", 5) > 6:
                 self._add_cultural_element(entity, "rituals", self._generate_ritual(dna))
             if dna.get("sociality", 5) > 6:
@@ -223,25 +271,23 @@ class EvolutionEngine:
     
     def _add_cultural_element(self, entity: Dict, category: str, element: str):
         """문화 요소 추가 (중복 방지)"""
-        if "culture" not in entity:
-            entity["culture"] = {"values": [], "taboos": [], "myths": [], "rituals": []}
+        self._ensure_entity_structure(entity)
         
         if element not in entity["culture"].get(category, []):
-            if len(entity["culture"].get(category, [])) < 20:  # 최대 20개 제한
+            if len(entity["culture"].get(category, [])) < 20:
                 entity["culture"][category].append(element)
     
     def _check_stage_advancement(self, entity: Dict):
         """문명 단계 발전 체크"""
         current_stage = entity.get("stage", 0)
         
-        # 단계별 발전 조건
         requirements = {
-            0: {"population": 100, "culture_count": 3},    # 원시 → 부족
-            1: {"population": 1000, "culture_count": 8},   # 부족 → 초기문명
-            2: {"population": 10000, "culture_count": 15}, # 초기문명 → 고전
-            3: {"population": 100000, "technology": 5},    # 고전 → 중세
-            4: {"population": 500000, "technology": 15},   # 중세 → 산업
-            5: {"population": 1000000, "technology": 30},  # 산업 → 정보
+            0: {"population": 100, "culture_count": 3},
+            1: {"population": 1000, "culture_count": 8},
+            2: {"population": 10000, "culture_count": 15},
+            3: {"population": 100000, "technology": 5},
+            4: {"population": 500000, "technology": 15},
+            5: {"population": 1000000, "technology": 30},
         }
         
         if current_stage in requirements:
@@ -265,61 +311,56 @@ class EvolutionEngine:
     
     def _apply_dna_drift(self, entity: Dict):
         """DNA 서서히 변화"""
-        if random.random() < 0.01:  # 1% 확률로 미세 변화
-            if "dna" in entity and "innate" in entity["dna"]:
-                trait = random.choice(list(entity["dna"]["innate"].keys()))
+        if random.random() < 0.01:
+            dna_innate = entity.get("dna", {}).get("innate", {})
+            if dna_innate:
+                trait = random.choice(list(dna_innate.keys()))
                 drift = random.uniform(-0.1, 0.1)
-                current = entity["dna"]["innate"][trait]
+                current = dna_innate.get(trait, 5)
                 new_value = max(0, min(10, current + drift))
-                entity["dna"]["innate"][trait] = round(new_value, 1)
+                dna_innate[trait] = round(new_value, 1)
     
     def _check_contacts(self):
         """집단 간 접촉 체크"""
         entities = self.world.get("entities", {}).get("planet_2", [])
         
         for i, entity1 in enumerate(entities):
+            self._ensure_entity_structure(entity1)
             for entity2 in entities[i+1:]:
+                self._ensure_entity_structure(entity2)
                 if entity1["id"] in entity2.get("relations", {}):
-                    continue  # 이미 접촉함
+                    continue
                 
-                # 탐험 성향에 따른 접촉 확률
                 explore1 = entity1.get("dna", {}).get("expressed", {}).get("exploration", 5)
                 explore2 = entity2.get("dna", {}).get("expressed", {}).get("exploration", 5)
                 
-                contact_chance = (explore1 + explore2) / 2000  # 기본 낮은 확률
+                contact_chance = (explore1 + explore2) / 2000
                 
                 if random.random() < contact_chance:
                     self._make_contact(entity1, entity2)
     
     def _make_contact(self, entity1: Dict, entity2: Dict):
         """첫 접촉 처리"""
-        # DNA 호환성 계산
+        self._ensure_entity_structure(entity1)
+        self._ensure_entity_structure(entity2)
+        
         dna1 = entity1.get("dna", {}).get("innate", {})
         dna2 = entity2.get("dna", {}).get("innate", {})
         
-        compatibility = 5  # 기본값
+        compatibility = 5
         
-        # 공격성 차이
         agg_diff = abs(dna1.get("aggression", 5) - dna2.get("aggression", 5))
         compatibility -= agg_diff * 0.3
         
-        # 사회성 합
         soc_sum = dna1.get("sociality", 5) + dna2.get("sociality", 5)
         compatibility += (soc_sum - 10) * 0.2
         
-        # 관계 결정
         if compatibility > 6:
             relation = "friendly"
         elif compatibility > 3:
             relation = "neutral"
         else:
             relation = "hostile"
-        
-        # 관계 기록
-        if "relations" not in entity1:
-            entity1["relations"] = {}
-        if "relations" not in entity2:
-            entity2["relations"] = {}
             
         entity1["relations"][entity2["id"]] = {
             "status": relation,
@@ -332,7 +373,6 @@ class EvolutionEngine:
             "compatibility": round(compatibility, 1)
         }
         
-        # 이벤트 기록
         self.new_events.append({
             "epoch": self.current_epoch,
             "type": "first_contact",
@@ -342,20 +382,21 @@ class EvolutionEngine:
     
     def _check_discoveries(self):
         """자원 발견 체크"""
-        # planet_2의 특수 자원들
-        special_resources = self.world.get("stellar_system", {}).get("bodies", [])[1].get("special_resources", [])
+        bodies = self.world.get("stellar_system", {}).get("bodies", [])
+        if len(bodies) < 2:
+            return
+            
+        special_resources = bodies[1].get("special_resources", [])
         
         for resource in special_resources:
             if resource.get("discovered"):
                 continue
                 
-            # 해당 위치의 엔티티가 발견할 수 있는지
             for entity in self.world.get("entities", {}).get("planet_2", []):
+                self._ensure_entity_structure(entity)
                 location = entity.get("location", {})
                 
-                # 위치 매칭 (간단한 로직)
                 if "south" in resource.get("location", "") and location.get("continent") == "south":
-                    # 호기심 + 탐험성향에 따른 발견 확률
                     dna = entity.get("dna", {}).get("innate", {})
                     discovery_chance = dna.get("curiosity", 5) / 10000
                     
@@ -380,11 +421,9 @@ class EvolutionEngine:
                 prob = life.get("emergence_probability", 0)
                 
                 if random.random() < prob:
-                    # 새 생명 탄생!
                     life["status"] = "active"
                     life["started"] = self.current_epoch
                     
-                    # 새 엔티티 생성
                     new_entity = self._generate_new_life(body["id"])
                     
                     if body["id"] not in self.world["entities"]:
@@ -429,11 +468,14 @@ class EvolutionEngine:
             "relations": {},
             "history": [],
             "discovered_resources": [],
-            "technology": []
+            "technology": [],
+            "notable_individuals": []
         }
     
     def _record_event(self, accident: Dict, response: str, entity: Dict):
         """이벤트 기록"""
+        self._ensure_entity_structure(entity)
+        
         event = {
             "epoch": self.current_epoch,
             "accident": accident,
@@ -442,11 +484,8 @@ class EvolutionEngine:
             "population_after": entity["population"]
         }
         
-        if "history" not in entity:
-            entity["history"] = []
         entity["history"].append(event)
         
-        # 최근 100개만 유지
         if len(entity["history"]) > 100:
             entity["history"] = entity["history"][-100:]
     
@@ -471,10 +510,7 @@ class EvolutionEngine:
         self.world["universe"]["current_epoch"] = self.current_epoch
         self.world["universe"]["last_accessed"] = datetime.now().strftime("%Y-%m-%d")
         
-        # 히스토리에 이벤트 추가
-        if "history" not in self.world:
-            self.world["history"] = {"major_events": [], "accidents": [], "discoveries": [], "contacts": [], "extinctions": []}
-        
+        # 이벤트 추가
         for event in self.new_events:
             if event["type"] == "first_contact":
                 self.world["history"]["contacts"].append(event)
@@ -502,7 +538,6 @@ def main():
     """메인 실행"""
     import requests
     
-    # 환경 변수에서 설정 읽기
     gist_id = os.environ.get("GIST_ID")
     github_token = os.environ.get("GITHUB_TOKEN")
     
@@ -510,7 +545,6 @@ def main():
         print("Error: GIST_ID and GITHUB_TOKEN environment variables required")
         return
     
-    # Gist에서 현재 상태 읽기
     headers = {
         "Authorization": f"token {github_token}",
         "Accept": "application/vnd.github.v3+json"
@@ -523,7 +557,6 @@ def main():
     
     gist_data = response.json()
     
-    # JSON 파일 찾기
     json_file = None
     for filename, file_info in gist_data.get("files", {}).items():
         if filename.endswith(".json"):
@@ -537,7 +570,6 @@ def main():
     filename, content = json_file
     world_state = json.loads(content)
     
-    # 진화 실행
     print(f"Starting evolution from epoch {world_state['universe']['current_epoch']}")
     
     engine = EvolutionEngine(world_state)
@@ -547,7 +579,6 @@ def main():
     print(f"New events: {len(engine.new_events)}")
     print(f"New accidents: {len(engine.new_accidents)}")
     
-    # Gist 업데이트
     update_data = {
         "files": {
             filename: {
