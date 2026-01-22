@@ -1,0 +1,21 @@
+name: Evolve COSMOS-9182
+
+on:
+  schedule:
+    - cron: '0 * * * *'
+  workflow_dispatch:
+
+jobs:
+  evolve:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+    - run: pip install requests
+    - name: Run evolution
+      env:
+        GIST_ID: ${{ secrets.GIST_ID }}
+        GITHUB_TOKEN: ${{ secrets.GIST_TOKEN }}
+      run: python evolve.py
