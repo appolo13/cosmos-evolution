@@ -2,7 +2,7 @@ name: Evolve COSMOS-9182
 
 on:
   schedule:
-    - cron: '0 * * * *'
+    - cron: '*/10 * * * *'
   workflow_dispatch:
 
 jobs:
